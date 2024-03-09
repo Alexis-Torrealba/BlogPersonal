@@ -1,6 +1,10 @@
 import { useState } from 'react';
+import { firestore, storage } from './Firebase/config';
+import { addDoc, collection } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import Swal from 'sweetalert2';
 
-function CreatePost({ onFormSubmit }) {
+function CreatePost() {
 	//Manejamos el estado de los datos del form
 	const [postData, setPostData] = useState({
 		title: '',
@@ -12,16 +16,15 @@ function CreatePost({ onFormSubmit }) {
 	});
 
 	const handleChange = (e) => {
-		const { name, type } = e.target;
-		//obtengo el valor y el tipo de dato del input
-		if (type === 'file') {
-			const file = e.target.files[0];
+		const { name, value, files } = e.target;
+		if (files && files.length > 0) {
+			const imageFile = files[0];
+			// Asignar el archivo de imagen al estado
 			setPostData((prevData) => ({
 				...prevData,
-				[name]: file,
+				imag: imageFile,
 			}));
 		} else {
-			const { value } = e.target;
 			setPostData((prevData) => ({
 				...prevData,
 				[name]: value,
@@ -29,18 +32,44 @@ function CreatePost({ onFormSubmit }) {
 		}
 	};
 
-	const handleSubmit = (e) => {
+	const handleSubmit = async (e) => {
 		e.preventDefault();
-		onFormSubmit(postData);
-		//limpio el formulario
-		setPostData({
-			title: '',
-			date: '',
-			author: '',
-			imag: '',
-			extract: '',
-			descrip: '',
-		});
+
+		try {
+			// Subir el archivo de imagen a Firebase Storage
+			const imageRef = ref(storage, `images/${postData.imag.name}`);
+			await uploadBytes(imageRef, postData.imag);
+			// Obtener la URL de la imagen subida
+			const imageURL = await getDownloadURL(imageRef);
+			// Guardar los datos en Firestore con la URL de la imagen
+			await addDoc(collection(firestore, 'posts'), {
+				...postData,
+				imag: imageURL,
+			});
+			setPostData({
+				title: '',
+				date: '',
+				author: '',
+				imag: '',
+				extract: '',
+				descrip: '',
+			});
+
+			Swal.fire({
+				position: 'top',
+				icon: 'success',
+				title: 'Información enviada',
+				showConfirmButton: false,
+				timer: 1500,
+			});
+		} catch (error) {
+			console.error('Error al enviar los datos a Firebase', error);
+			Swal.fire({
+				icon: 'error',
+				title: 'Error al enviar los datos',
+				text: 'Ocurrió un error al enviar los datos a Firebase. Por favor, inténtalo de nuevo más tarde.',
+			});
+		}
 	};
 
 	return (
@@ -82,6 +111,7 @@ function CreatePost({ onFormSubmit }) {
 						type="file"
 						name="imag"
 						id="imag"
+						accept="image/*"
 						className="w-full text-md text-[#444] border-2 p-2 border-[#929292] rounded-lg cursor-pointer dark:text-[#444] focus:outline-none"
 						onChange={handleChange}
 					/>
